@@ -36,3 +36,4 @@ if camera_image is not None:
     st.image(smudge_img, caption="Detected Smudge", use_column_width=True)
     st.write(f"There are Smudge {int(smudge_percentage)}")
 
+
