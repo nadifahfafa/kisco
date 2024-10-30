@@ -1,99 +1,38 @@
 import streamlit as st
-import qrcode
 from PIL import Image
-import io
-import speech_recognition as sr  # Will only work in a local environment with microphone access
+import numpy as np
 
-# Menu with items and prices
-menu = {
-    "burger": 5.99,
-    "pizza": 8.99,
-    "coffee": 2.99,
-    "salad": 4.99,
-    "soda": 1.99
-}
+def detect_smudge(image):
+    # Convert the image to grayscale for processing
+    gray_image = image.convert("L")
+    gray_array = np.array(gray_image)
 
-# Initialize an empty list to store orders
-if 'order_list' not in st.session_state:
-    st.session_state['order_list'] = []
-if 'total_price' not in st.session_state:
-    st.session_state['total_price'] = 0.0
+    # Define a threshold for smudge detection
+    threshold = 200
+    smudge_mask = gray_array > threshold
 
-# Function to generate QR code
-def generate_qr_code(url):
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(url)
-    qr.make(fit=True)
-    img = qr.make_image(fill='black', back_color='white')
-    
-    # Convert the image to a format suitable for Streamlit
-    img_byte_array = io.BytesIO()
-    img.save(img_byte_array, format='PNG')
-    img_byte_array = img_byte_array.getvalue()
-    
-    return img_byte_array
+    # Calculate smudge percentage
+    smudge_area = np.sum(smudge_mask)  # Count smudge pixels
+    total_area = gray_array.size       # Total pixels in the image
+    smudge_percentage = (smudge_area / total_area) * 100
 
-# Voice recognition function (only works locally)
-def recognize_speech():
-    recognizer = sr.Recognizer()
-    
-    try:
-        mic = sr.Microphone()
-        st.write("Listening for your order...")
+    # Generate binary smudge mask image for display
+    smudge_image = (smudge_mask * 255).astype(np.uint8)
 
-        with mic as source:
-            recognizer.adjust_for_ambient_noise(source)
-            audio = recognizer.listen(source)
+    return Image.fromarray(smudge_image), smudge_percentage
 
-        try:
-            order = recognizer.recognize_google(audio).lower()  # Convert to lowercase for easier matching
-            st.write(f"You said: {order}")
-            return order
-        except sr.UnknownValueError:
-            st.error("Sorry, I didn't catch that. Please try again.")
-            return None
-        except sr.RequestError:
-            st.error("API unavailable")
-            return None
-    except Exception as e:
-        st.error("Microphone not available. Please check your device.")
-        return None
+st.title("Real-Time Smudge Detection with Smudge Coverage")
 
-# Function to process the order, update total, and display price
-def process_order(order):
-    if order in menu:
-        price = menu[order]
-        st.session_state['order_list'].append((order, price))
-        st.session_state['total_price'] += price
-        st.success(f"Added {order.capitalize()} - ${price:.2f} to your order.")
-    else:
-        st.error(f"Item '{order}' not found in the menu. Please try again.")
+# Capture image from webcam
+camera_image = st.camera_input("Capture an image to detect smudge")
 
-# App interface
-st.title("Touchless Kiosk Ordering System")
+if camera_image is not None:
+    # Open the image and perform smudge detection
+    img = Image.open(camera_image)
+    smudge_img, smudge_percentage = detect_smudge(img)
 
-# Generate a QR code for mobile interaction
-url = "https://your-ordering-system.com"  # Replace with actual ordering site URL
-st.write("Scan the QR code to use the ordering system on your phone:")
+    # Display the original and processed images
+    st.image(img, caption="Original Image", use_column_width=True)
+    st.image(smudge_img, caption="Detected Smudge", use_column_width=True)
+    st.write(f"There are Smudge {int(smudge_percentage)}")
 
-# Display the QR code
-qr_image = generate_qr_code(url)
-st.image(qr_image, caption="Scan to place your order", use_column_width=True)
-
-st.write("Or use voice commands to place your order (works locally):")
-
-# Button to start voice recognition (only works locally)
-if st.button("Start Voice Command"):
-    order = recognize_speech()
-    if order:
-        process_order(order)
-
-# Display the order summary and total
-if st.session_state['order_list']:
-    st.write("### Your Order:")
-    for item, price in st.session_state['order_list']:
-        st.write(f"- {item.capitalize()} - ${price:.2f}")
-    
-    st.write(f"### Total Price: ${st.session_state['total_price']:.2f}")
-
-st.write("No need to touch the screen. Stay safe!")
